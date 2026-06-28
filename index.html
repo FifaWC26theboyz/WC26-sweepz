@@ -203,21 +203,21 @@ header{background:var(--surface);border-bottom:0.5px solid var(--border);padding
 const FB_URL = 'https://wc26-sweepstakedmh-default-rtdb.asia-southeast1.firebasedatabase.app';
 
 const PLAYERS = [
-  { name:"Matty T", short:"MG", av:"av-p", fill:"fill-p",
+  { name:"Matty T", short:"MG", av:"av-p", fill:"fill-p", col:"#7F77DD",
     teams:[
       {n:1,name:"France"},{n:6,name:"Germany"},{n:7,name:"Portugal"},{n:12,name:"Switzerland"},
       {n:13,name:"Mexico"},{n:18,name:"USA"},{n:19,name:"Colombia"},{n:24,name:"Ivory Coast"},
       {n:25,name:"Egypt"},{n:30,name:"Ghana"},{n:31,name:"Canada"},{n:36,name:"Paraguay"},
       {n:37,name:"Saudi Arabia"},{n:42,name:"Iraq"},{n:43,name:"Jordan"},{n:48,name:"Haiti"}
     ]},
-  { name:"Dalan", short:"DA", av:"av-t", fill:"fill-t",
+  { name:"Dalan", short:"DA", av:"av-t", fill:"fill-t", col:"#1D9E75",
     teams:[
       {n:2,name:"Spain"},{n:5,name:"Argentina"},{n:8,name:"Netherlands"},{n:11,name:"Czechia"},
       {n:14,name:"Uruguay"},{n:17,name:"Senegal"},{n:20,name:"Morocco"},{n:23,name:"Austria"},
       {n:26,name:"Norway"},{n:29,name:"Australia"},{n:32,name:"Tunisia"},{n:35,name:"Iran"},
       {n:38,name:"Congo DR"},{n:41,name:"South Africa"},{n:44,name:"Qatar"},{n:47,name:"Panama"}
     ]},
-  { name:"Hiraskuxx", short:"HK", av:"av-c", fill:"fill-c",
+  { name:"Hiraskuxx", short:"HK", av:"av-c", fill:"fill-c", col:"#D85A30",
     teams:[
       {n:3,name:"Brazil"},{n:4,name:"England"},{n:9,name:"Japan"},{n:10,name:"Belgium"},
       {n:15,name:"Croatia"},{n:16,name:"Bosnia-Herzegovina"},{n:21,name:"Ecuador"},{n:22,name:"Turkey"},
@@ -773,196 +773,112 @@ function renderBracket(){
   autoFillKoTeams();
   function gm(id){return koMatches.find(m=>m.id===id)||{homeTeam:null,awayTeam:null,homeG:null,awayG:null,winner:null};}
   function ownerCol(team){
-    if(!team)return'var(--surface3)';
-    const p=getOwner(team);
-    if(!p)return'var(--surface3)';
-    return p.col;
+    if(!team)return'#cccccc';
+    for(const p of PLAYERS)if(p.teams.some(t=>t.name===team))return p.col;
+    return'#cccccc';
   }
-  function teamRow(team,winner,score){
+  function teamRow(team,winner,scoreVal){
     const done=!!winner;
     const won=done&&winner===team;
     const lost=done&&winner!==team&&!!team;
-    const cls=won?'b-won':lost?'b-lost':!team?'b-tbd':'';
+    const bg=won?'var(--green-bg)':lost?'var(--surface2)':'var(--surface)';
+    const col=won?'var(--teal-text)':lost?'var(--text3)':'var(--text)';
+    const op=lost?'0.5':'1';
     const dotCol=ownerCol(team);
-    return `<div class="b-team ${cls}">
-      <div class="b-owner" style="background:${dotCol}"></div>
-      <span class="b-tname">${team||'TBD'}</span>
-      ${done&&team!=null?`<span class="b-score">${score??''}</span>`:''}
+    return `<div style="display:flex;align-items:center;gap:5px;padding:5px 7px;font-size:11px;background:${bg};border:0.5px solid var(--border);opacity:${op}">
+      <div style="width:7px;height:7px;border-radius:50%;background:${dotCol};flex-shrink:0"></div>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${col};font-weight:${won?'500':'400'}">${team||'TBD'}</span>
+      ${done&&team?`<span style="font-size:11px;font-weight:600;color:var(--text2)">${scoreVal??''}</span>`:''}
     </div>`;
   }
-  function matchBlock(id,extraStyle=''){
+  function matchCard(id){
     const m=gm(id);
-    return `<div class="b-match" style="${extraStyle}">${teamRow(m.homeTeam,m.winner,m.homeG)}${teamRow(m.awayTeam,m.winner,m.awayG)}</div>`;
+    return `<div style="border-radius:8px;overflow:hidden;border:0.5px solid var(--border);margin:0 4px">
+      ${teamRow(m.homeTeam,m.winner,m.homeG)}
+      <div style="height:0.5px;background:var(--border)"></div>
+      ${teamRow(m.awayTeam,m.winner,m.awayG)}
+    </div>`;
   }
 
-  // Use SVG-based bracket for proper connecting lines
-  const r32pairs=[['M73','M74'],['M75','M76'],['M77','M78'],['M79','M80'],['M81','M82'],['M83','M84'],['M85','M86'],['M87','M88']];
-  const r16=['M89','M90','M91','M92','M93','M94','M95','M96'];
-  const qf=['M97','M98','M99','M100'];
-  const sf=['M101','M102'];
-  const fin=gm('M104');
-  const third=gm('M103');
+  const ROUNDS = [
+    { label:'R32', ids:['M73','M74','M75','M76','M77','M78','M79','M80','M81','M82','M83','M84','M85','M86','M87','M88'], pairs:true },
+    { label:'R16', ids:['M89','M90','M91','M92','M93','M94','M95','M96'], pairs:false },
+    { label:'QF',  ids:['M97','M98','M99','M100'], pairs:false },
+    { label:'SF',  ids:['M101','M102'], pairs:false },
+    { label:'Final 🏆', ids:['M104'], pairs:false },
+  ];
 
-  // Each match card height
-  const MH=44; // match height px (2 teams * 22px)
-  const GAP=10; // gap between matches
-  const ROUNDW=130; // round column width
-  const LINEW=18; // connector width
+  // Simple flex layout — each round is a column, matches spaced evenly
+  // Connecting lines via a thin SVG column between rounds
+  const MW = 125; // match card width
+  const MH = 46;  // match card height (2 rows * 23px)
+  const LINEW = 16;
 
-  // Build HTML with inline SVG connectors between rounds
-  // We'll do a simpler scrollable table layout with drawn lines via CSS borders
+  let html = `<div style="overflow-x:auto;padding:8px 0 16px"><div style="display:inline-flex;align-items:flex-start;min-width:max-content">`;
 
-  let html=`<div style="overflow-x:auto;padding:8px 0"><div style="display:flex;gap:0;min-width:780px;align-items:stretch">`;
+  ROUNDS.forEach((round, ri) => {
+    const count = round.ids.length;
+    // How tall is total column
+    // R32: 16 matches in pairs with spacing
+    // Others: matches spaced evenly
 
-  function roundCol(label, ids, matchesPerGroup, showGap){
-    let h=`<div style="display:flex;flex-direction:column;min-width:${ROUNDW}px">`;
-    h+=`<div class="b-round-label">${label}</div>`;
-    h+=`<div style="display:flex;flex-direction:column;flex:1;justify-content:space-around;gap:${GAP}px;padding-bottom:${GAP}px">`;
-    ids.forEach(id=>{h+=matchBlock(id);});
-    h+=`</div></div>`;
-    return h;
-  }
+    html += `<div style="display:flex;flex-direction:column;width:${MW}px">`;
+    html += `<div style="font-size:10px;font-weight:500;color:var(--text2);text-align:center;padding:0 4px 8px;text-transform:uppercase;letter-spacing:0.5px">${round.label}</div>`;
 
-  function connectorCol(count){
-    // SVG column drawing lines from N matches to N/2 matches
-    const totalH=count*(MH+GAP);
-    const pairH=totalH/count*2;
-    let svg=`<svg width="${LINEW}" height="${totalH}" style="flex-shrink:0;margin-top:28px" xmlns="http://www.w3.org/2000/svg">`;
-    for(let i=0;i<count/2;i++){
-      const y1=(i*2)*(MH+GAP)+MH/2;
-      const y2=(i*2+1)*(MH+GAP)+MH/2;
-      const ymid=(y1+y2)/2;
-      svg+=`<path d="M0,${y1} H${LINEW/2} V${ymid} M0,${y2} H${LINEW/2} V${ymid} M${LINEW/2},${ymid} H${LINEW}" fill="none" stroke="var(--border2)" stroke-width="1"/>`;
+    if(round.label==='R32'){
+      // 16 matches in 8 pairs, each pair has a small gap between them and bigger gap between pairs
+      html += `<div style="display:flex;flex-direction:column;gap:4px">`;
+      for(let i=0;i<8;i++){
+        html += matchCard(round.ids[i*2]);
+        html += `<div style="height:3px"></div>`;
+        html += matchCard(round.ids[i*2+1]);
+        if(i<7)html += `<div style="height:12px"></div>`;
+      }
+      html += `</div>`;
+    } else if(round.label==='Final 🏆'){
+      const fin=gm('M104');
+      const champ=fin.winner;
+      const champP=champ?PLAYERS.find(p=>p.teams.some(t=>t.name===champ)):null;
+      html += `<div style="display:flex;flex-direction:column;justify-content:center;flex:1;gap:8px">`;
+      html += matchCard('M104');
+      if(champ){
+        html += `<div style="margin:4px 4px 0;background:var(--surface);border:2px solid var(--gold);border-radius:10px;padding:8px;text-align:center">
+          <div style="font-size:9px;font-weight:500;color:var(--gold);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">🏆 Champion</div>
+          <div style="font-size:12px;font-weight:500;display:flex;align-items:center;justify-content:center;gap:5px">
+            <div style="width:8px;height:8px;border-radius:50%;background:${champP?.col||'#ccc'}"></div>
+            ${champ}
+          </div>
+        </div>`;
+      }
+      html += `<div style="font-size:9px;color:var(--text3);text-align:center;padding:4px 0 2px;font-style:italic">3rd place</div>`;
+      html += matchCard('M103');
+      html += `</div>`;
+    } else {
+      html += `<div style="display:flex;flex-direction:column;justify-content:space-around;gap:4px;flex:1">`;
+      round.ids.forEach(id => { html += matchCard(id); });
+      html += `</div>`;
     }
-    svg+=`</svg>`;
-    return svg;
-  }
+    html += `</div>`;
 
-  // R32 — 16 matches in 8 pairs
-  let r32html=`<div style="display:flex;flex-direction:column;min-width:${ROUNDW}px">`;
-  r32html+=`<div class="b-round-label">R32</div>`;
-  r32html+=`<div style="display:flex;flex-direction:column;gap:${GAP}px;padding-bottom:${GAP}px">`;
-  r32pairs.forEach(([a,b])=>{
-    r32html+=matchBlock(a);
-    r32html+=`<div style="height:${GAP}px"></div>`;
-    r32html+=matchBlock(b);
-    r32html+=`<div style="height:${GAP}px"></div>`;
+    // Add SVG connector between rounds (not after last)
+    if(ri < ROUNDS.length - 1){
+      const nextCount = ROUNDS[ri+1].ids.length;
+      const curCount = round.ids.length;
+      // Simple bracket lines: pair up current matches → next matches
+      // We'll just draw a simple elbow for each pair
+      const pairCount = nextCount; // one line per next match
+      // Heights are approximate — just show a thin divider with elbows
+      html += `<div style="width:${LINEW}px;display:flex;flex-direction:column;justify-content:space-around;padding-top:22px">`;
+      for(let i=0;i<pairCount;i++){
+        html += `<div style="display:flex;flex-direction:column;align-items:center;flex:1;justify-content:space-around">
+          <div style="width:100%;height:0.5px;background:var(--border2)"></div>
+        </div>`;
+      }
+      html += `</div>`;
+    }
   });
-  r32html+=`</div></div>`;
-  html+=r32html;
 
-  // Connector R32→R16
-  const r32totalH=r32pairs.length*(2*(MH+GAP)+GAP);
-  const r16count=8;
-  let conn1=`<svg width="${LINEW}" style="flex-shrink:0;margin-top:28px;align-self:stretch" xmlns="http://www.w3.org/2000/svg">`;
-  // Draw 8 pairs of lines connecting pairs→single
-  // Each R32 group = 2 matches + gaps
-  const groupH=2*(MH+GAP)+GAP;
-  for(let i=0;i<8;i++){
-    const base=i*groupH;
-    const y1=base+MH/2;
-    const y2=base+(MH+GAP)+MH/2;
-    const ymid=(y1+y2)/2;
-    conn1+=`<line x1="0" y1="${y1}" x2="${LINEW/2}" y2="${y1}" stroke="var(--border2)" stroke-width="1"/>`;
-    conn1+=`<line x1="0" y1="${y2}" x2="${LINEW/2}" y2="${y2}" stroke="var(--border2)" stroke-width="1"/>`;
-    conn1+=`<line x1="${LINEW/2}" y1="${y1}" x2="${LINEW/2}" y2="${y2}" stroke="var(--border2)" stroke-width="1"/>`;
-    conn1+=`<line x1="${LINEW/2}" y1="${ymid}" x2="${LINEW}" y2="${ymid}" stroke="var(--border2)" stroke-width="1"/>`;
-  }
-  conn1+=`</svg>`;
-  html+=conn1;
-
-  // R16
-  let r16html=`<div style="display:flex;flex-direction:column;min-width:${ROUNDW}px">`;
-  r16html+=`<div class="b-round-label">R16</div>`;
-  r16html+=`<div style="display:flex;flex-direction:column;gap:${GAP}px;padding-bottom:${GAP}px">`;
-  // R16 needs same spacing as R32 groups — center each match within groupH
-  r16.forEach((id,i)=>{
-    const padTop=i===0?0:GAP;
-    r16html+=`<div style="height:${groupH-MH}px;display:flex;align-items:center">${matchBlock(id)}</div>`;
-  });
-  r16html+=`</div></div>`;
-  html+=r16html;
-
-  // Connector R16→QF
-  const r16groupH=groupH;
-  let conn2=`<svg width="${LINEW}" style="flex-shrink:0;margin-top:28px;align-self:stretch" xmlns="http://www.w3.org/2000/svg">`;
-  for(let i=0;i<4;i++){
-    const y1=i*2*r16groupH+(r16groupH-MH)/2+MH/2;
-    const y2=(i*2+1)*r16groupH+(r16groupH-MH)/2+MH/2;
-    const ymid=(y1+y2)/2;
-    conn2+=`<line x1="0" y1="${y1}" x2="${LINEW/2}" y2="${y1}" stroke="var(--border2)" stroke-width="1"/>`;
-    conn2+=`<line x1="0" y1="${y2}" x2="${LINEW/2}" y2="${y2}" stroke="var(--border2)" stroke-width="1"/>`;
-    conn2+=`<line x1="${LINEW/2}" y1="${y1}" x2="${LINEW/2}" y2="${y2}" stroke="var(--border2)" stroke-width="1"/>`;
-    conn2+=`<line x1="${LINEW/2}" y1="${ymid}" x2="${LINEW}" y2="${ymid}" stroke="var(--border2)" stroke-width="1"/>`;
-  }
-  conn2+=`</svg>`;
-  html+=conn2;
-
-  // QF — 4 matches
-  const qfGroupH=r16groupH*2;
-  let qfhtml=`<div style="display:flex;flex-direction:column;min-width:${ROUNDW}px">`;
-  qfhtml+=`<div class="b-round-label">QF</div>`;
-  qfhtml+=`<div style="display:flex;flex-direction:column;padding-bottom:${GAP}px">`;
-  qf.forEach((id,i)=>{
-    qfhtml+=`<div style="height:${qfGroupH}px;display:flex;align-items:center">${matchBlock(id)}</div>`;
-  });
-  qfhtml+=`</div></div>`;
-  html+=qfhtml;
-
-  // Connector QF→SF
-  let conn3=`<svg width="${LINEW}" style="flex-shrink:0;margin-top:28px;align-self:stretch" xmlns="http://www.w3.org/2000/svg">`;
-  for(let i=0;i<2;i++){
-    const y1=i*2*qfGroupH+qfGroupH/2;
-    const y2=(i*2+1)*qfGroupH+qfGroupH/2;
-    const ymid=(y1+y2)/2;
-    conn3+=`<line x1="0" y1="${y1}" x2="${LINEW/2}" y2="${y1}" stroke="var(--border2)" stroke-width="1"/>`;
-    conn3+=`<line x1="0" y1="${y2}" x2="${LINEW/2}" y2="${y2}" stroke="var(--border2)" stroke-width="1"/>`;
-    conn3+=`<line x1="${LINEW/2}" y1="${y1}" x2="${LINEW/2}" y2="${y2}" stroke="var(--border2)" stroke-width="1"/>`;
-    conn3+=`<line x1="${LINEW/2}" y1="${ymid}" x2="${LINEW}" y2="${ymid}" stroke="var(--border2)" stroke-width="1"/>`;
-  }
-  conn3+=`</svg>`;
-  html+=conn3;
-
-  // SF — 2 matches
-  const sfGroupH=qfGroupH*2;
-  let sfhtml=`<div style="display:flex;flex-direction:column;min-width:${ROUNDW}px">`;
-  sfhtml+=`<div class="b-round-label">SF</div>`;
-  sfhtml+=`<div style="display:flex;flex-direction:column;padding-bottom:${GAP}px">`;
-  sf.forEach((id,i)=>{
-    sfhtml+=`<div style="height:${sfGroupH}px;display:flex;align-items:center">${matchBlock(id)}</div>`;
-  });
-  sfhtml+=`</div></div>`;
-  html+=sfhtml;
-
-  // Connector SF→Final
-  let conn4=`<svg width="${LINEW}" style="flex-shrink:0;margin-top:28px;align-self:stretch" xmlns="http://www.w3.org/2000/svg">`;
-  const y1sf=sfGroupH/2;
-  const y2sf=sfGroupH+sfGroupH/2;
-  const ymidsf=(y1sf+y2sf)/2;
-  conn4+=`<line x1="0" y1="${y1sf}" x2="${LINEW/2}" y2="${y1sf}" stroke="var(--border2)" stroke-width="1"/>`;
-  conn4+=`<line x1="0" y1="${y2sf}" x2="${LINEW/2}" y2="${y2sf}" stroke="var(--border2)" stroke-width="1"/>`;
-  conn4+=`<line x1="${LINEW/2}" y1="${y1sf}" x2="${LINEW/2}" y2="${y2sf}" stroke="var(--border2)" stroke-width="1"/>`;
-  conn4+=`<line x1="${LINEW/2}" y1="${ymidsf}" x2="${LINEW}" y2="${ymidsf}" stroke="var(--border2)" stroke-width="1"/>`;
-  conn4+=`</svg>`;
-  html+=conn4;
-
-  // Final + champion
-  const champ=fin.winner;
-  const champP=champ?getOwner(champ):null;
-  const finGroupH=sfGroupH*2;
-  let finhtml=`<div style="display:flex;flex-direction:column;min-width:${ROUNDW}px">`;
-  finhtml+=`<div class="b-round-label">Final 🏆</div>`;
-  finhtml+=`<div style="display:flex;flex-direction:column">`;
-  finhtml+=`<div style="height:${finGroupH/2}px;display:flex;align-items:center">${matchBlock('M104')}</div>`;
-  if(champ){
-    finhtml+=`<div class="b-champ"><div class="b-champ-label">🏆 Champion</div><div class="b-champ-name"><span style="width:8px;height:8px;border-radius:50%;background:${champP?.col||'#ccc'};display:inline-block;margin-right:5px;vertical-align:middle"></span>${champ}</div></div>`;
-  }
-  finhtml+=`<div class="b-third-label">3rd place</div>`;
-  finhtml+=matchBlock('M103');
-  finhtml+=`</div></div>`;
-  html+=finhtml;
-
-  html+=`</div></div>`;
+  html += `</div></div>`;
   document.getElementById('bracket').innerHTML=html;
 }
 
