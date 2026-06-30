@@ -469,25 +469,38 @@ function calcTeamPoints(team){
     }
     else base=-1;
   }
+  // Find the furthest stage this team has WON (not just appeared in)
+  // Winning a stage means you're guaranteed the NEXT stage's points minimum
+  // Won R32 = guaranteed R16 = 2pts
+  // Won R16 = guaranteed QF = 3pts
+  // Won QF = guaranteed SF = 5pts
+  // Won SF = guaranteed Final = 10pts
+  // Won Final = 20pts
+  // Lost in any stage = that stage's exit value
   const stageOrder=['r32','r16','qf','sf','3rd','final'];
-  let furthestIdx=-1;
+  const stageExitPts={r32:base,r16:2,qf:3,sf:5,'3rd':5,final:10};
+  const stageWinPts={r32:2,r16:3,qf:5,sf:10,'3rd':5,final:20};
+
+  let bestPts=base;
   let wonFinal=false;
+
   koMatches.forEach(m=>{
     if(m.stage==='final'&&m.winner===team)wonFinal=true;
-    if((m.homeTeam===team||m.awayTeam===team)&&m.winner){
-      const idx=stageOrder.indexOf(m.stage);
-      if(idx>furthestIdx)furthestIdx=idx;
+    if(m.homeTeam===team||m.awayTeam===team){
+      if(m.winner===team){
+        // Won this match — get next stage minimum
+        const winPts=stageWinPts[m.stage]??base;
+        if(winPts>bestPts)bestPts=winPts;
+      } else if(m.winner&&m.winner!==team){
+        // Lost here — exit value for this stage
+        const exitPts=stageExitPts[m.stage]??base;
+        if(exitPts>bestPts)bestPts=exitPts;
+      }
     }
   });
-  if(furthestIdx===-1)return base;
-  const furthest=stageOrder[furthestIdx];
-  if(furthest==='r32')return base;
-  if(furthest==='r16')return 2;
-  if(furthest==='qf')return 3;
-  if(furthest==='sf')return 5;
-  if(furthest==='3rd')return 5;
-  if(furthest==='final')return wonFinal?20:10;
-  return base;
+
+  if(wonFinal)return 20;
+  return bestPts;
 }
 
 function calcAllPoints(){
@@ -773,112 +786,157 @@ function renderBracket(){
   autoFillKoTeams();
   function gm(id){return koMatches.find(m=>m.id===id)||{homeTeam:null,awayTeam:null,homeG:null,awayG:null,winner:null};}
   function ownerCol(team){
-    if(!team)return'#cccccc';
-    for(const p of PLAYERS)if(p.teams.some(t=>t.name===team))return p.col;
-    return'#cccccc';
+    if(!team)return'var(--border2)';
+    for(const p of PLAYERS){if(p.teams.some(t=>t.name===team))return p.col;}
+    return'var(--border2)';
   }
-  function teamRow(team,winner,scoreVal){
-    const done=!!winner;
-    const won=done&&winner===team;
-    const lost=done&&winner!==team&&!!team;
-    const bg=won?'var(--green-bg)':lost?'var(--surface2)':'var(--surface)';
-    const col=won?'var(--teal-text)':lost?'var(--text3)':'var(--text)';
-    const op=lost?'0.5':'1';
-    const dotCol=ownerCol(team);
-    return `<div style="display:flex;align-items:center;gap:5px;padding:5px 7px;font-size:11px;background:${bg};border:0.5px solid var(--border);opacity:${op}">
-      <div style="width:7px;height:7px;border-radius:50%;background:${dotCol};flex-shrink:0"></div>
-      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${col};font-weight:${won?'500':'400'}">${team||'TBD'}</span>
-      ${done&&team?`<span style="font-size:11px;font-weight:600;color:var(--text2)">${scoreVal??''}</span>`:''}
-    </div>`;
-  }
-  function matchCard(id){
+  function card(id,w){
     const m=gm(id);
-    return `<div style="border-radius:8px;overflow:hidden;border:0.5px solid var(--border);margin:0 4px">
-      ${teamRow(m.homeTeam,m.winner,m.homeG)}
+    const done=!!m.winner;
+    function row(team,score){
+      const won=done&&m.winner===team;
+      const lost=done&&m.winner!==team&&!!team;
+      return `<div style="display:flex;align-items:center;gap:5px;padding:5px 7px;background:${won?'var(--green-bg)':'var(--surface)'};opacity:${lost?0.45:1}">
+        <div style="width:7px;height:7px;border-radius:50%;flex-shrink:0;background:${ownerCol(team)}"></div>
+        <span style="flex:1;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${won?'var(--teal-text)':'var(--text)'};font-weight:${won?500:400}">${team||'TBD'}</span>
+        ${done&&team?`<span style="font-size:11px;font-weight:600;color:var(--text2);margin-left:2px">${score??''}</span>`:''}
+      </div>`;
+    }
+    return `<div style="width:${w}px;border-radius:8px;overflow:hidden;border:0.5px solid ${done?'var(--teal)':'var(--border)'}">
+      ${row(m.homeTeam,m.homeG)}
       <div style="height:0.5px;background:var(--border)"></div>
-      ${teamRow(m.awayTeam,m.winner,m.awayG)}
+      ${row(m.awayTeam,m.awayG)}
     </div>`;
   }
 
-  const ROUNDS = [
-    { label:'R32', ids:['M73','M74','M75','M76','M77','M78','M79','M80','M81','M82','M83','M84','M85','M86','M87','M88'], pairs:true },
-    { label:'R16', ids:['M89','M90','M91','M92','M93','M94','M95','M96'], pairs:false },
-    { label:'QF',  ids:['M97','M98','M99','M100'], pairs:false },
-    { label:'SF',  ids:['M101','M102'], pairs:false },
-    { label:'Final 🏆', ids:['M104'], pairs:false },
-  ];
+  const CW=128, CH=46, GP=6, PG=10, LW=14;
+  const BH = CH*2 + GP + PG; // full block height per R32 pair incl gap below
+  const totalH = 8*BH - PG;  // 8 pairs, subtract last gap
 
-  // Simple flex layout — each round is a column, matches spaced evenly
-  // Connecting lines via a thin SVG column between rounds
-  const MW = 125; // match card width
-  const MH = 46;  // match card height (2 rows * 23px)
-  const LINEW = 16;
+  // Geometry functions
+  function r32CardCenters(i){ const b=i*BH; return [b+CH/2, b+CH+GP+CH/2]; }
+  function r16Center(i){ const [t,b]=r32CardCenters(i); return (t+b)/2; }
+  function qfCenter(i){ return (r16Center(i*2)+r16Center(i*2+1))/2; }
+  function sfCenter(i){ return (qfCenter(i*2)+qfCenter(i*2+1))/2; }
+  const finCenter = (sfCenter(0)+sfCenter(1))/2;
 
-  let html = `<div style="overflow-x:auto;padding:8px 0 16px"><div style="display:inline-flex;align-items:flex-start;min-width:max-content">`;
+  const R32=[['M73','M74'],['M75','M76'],['M77','M78'],['M79','M80'],['M81','M82'],['M83','M84'],['M85','M86'],['M87','M88']];
+  const R16=['M89','M90','M91','M92','M93','M94','M95','M96'];
+  const QF=['M97','M98','M99','M100'];
+  const SF=['M101','M102'];
 
-  ROUNDS.forEach((round, ri) => {
-    const count = round.ids.length;
-    // How tall is total column
-    // R32: 16 matches in pairs with spacing
-    // Others: matches spaced evenly
+  let html=`<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;padding:8px 0 16px"><div style="display:inline-block;padding:0 8px">`;
 
-    html += `<div style="display:flex;flex-direction:column;width:${MW}px">`;
-    html += `<div style="font-size:10px;font-weight:500;color:var(--text2);text-align:center;padding:0 4px 8px;text-transform:uppercase;letter-spacing:0.5px">${round.label}</div>`;
-
-    if(round.label==='R32'){
-      // 16 matches in 8 pairs, each pair has a small gap between them and bigger gap between pairs
-      html += `<div style="display:flex;flex-direction:column;gap:4px">`;
-      for(let i=0;i<8;i++){
-        html += matchCard(round.ids[i*2]);
-        html += `<div style="height:3px"></div>`;
-        html += matchCard(round.ids[i*2+1]);
-        if(i<7)html += `<div style="height:12px"></div>`;
-      }
-      html += `</div>`;
-    } else if(round.label==='Final 🏆'){
-      const fin=gm('M104');
-      const champ=fin.winner;
-      const champP=champ?PLAYERS.find(p=>p.teams.some(t=>t.name===champ)):null;
-      html += `<div style="display:flex;flex-direction:column;justify-content:center;flex:1;gap:8px">`;
-      html += matchCard('M104');
-      if(champ){
-        html += `<div style="margin:4px 4px 0;background:var(--surface);border:2px solid var(--gold);border-radius:10px;padding:8px;text-align:center">
-          <div style="font-size:9px;font-weight:500;color:var(--gold);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">🏆 Champion</div>
-          <div style="font-size:12px;font-weight:500;display:flex;align-items:center;justify-content:center;gap:5px">
-            <div style="width:8px;height:8px;border-radius:50%;background:${champP?.col||'#ccc'}"></div>
-            ${champ}
-          </div>
-        </div>`;
-      }
-      html += `<div style="font-size:9px;color:var(--text3);text-align:center;padding:4px 0 2px;font-style:italic">3rd place</div>`;
-      html += matchCard('M103');
-      html += `</div>`;
-    } else {
-      html += `<div style="display:flex;flex-direction:column;justify-content:space-around;gap:4px;flex:1">`;
-      round.ids.forEach(id => { html += matchCard(id); });
-      html += `</div>`;
-    }
-    html += `</div>`;
-
-    // Add SVG connector between rounds (not after last)
-    if(ri < ROUNDS.length - 1){
-      const nextCount = ROUNDS[ri+1].ids.length;
-      const curCount = round.ids.length;
-      // Simple bracket lines: pair up current matches → next matches
-      // We'll just draw a simple elbow for each pair
-      const pairCount = nextCount; // one line per next match
-      // Heights are approximate — just show a thin divider with elbows
-      html += `<div style="width:${LINEW}px;display:flex;flex-direction:column;justify-content:space-around;padding-top:22px">`;
-      for(let i=0;i<pairCount;i++){
-        html += `<div style="display:flex;flex-direction:column;align-items:center;flex:1;justify-content:space-around">
-          <div style="width:100%;height:0.5px;background:var(--border2)"></div>
-        </div>`;
-      }
-      html += `</div>`;
-    }
+  // Headers
+  html+=`<div style="display:flex;margin-bottom:8px">`;
+  [['R32',CW],['',LW],['R16',CW],['',LW],['QF',CW],['',LW],['SF',CW],['',LW],['Final 🏆',CW+50]].forEach(([lbl,w])=>{
+    html+=`<div style="width:${w}px;font-size:10px;font-weight:500;color:var(--text2);text-align:center;text-transform:uppercase;letter-spacing:0.5px">${lbl}</div>`;
   });
+  html+=`</div>`;
 
-  html += `</div></div>`;
+  // Main bracket area
+  html+=`<div style="display:flex;position:relative;height:${totalH}px">`;
+
+  // R32
+  html+=`<div style="width:${CW}px;position:relative">`;
+  R32.forEach(([a,b],i)=>{
+    const base=i*BH;
+    html+=`<div style="position:absolute;top:${base}px;left:0;right:0">`;
+    html+=card(a,CW);
+    html+=`<div style="height:${GP}px"></div>`;
+    html+=card(b,CW);
+    html+=`</div>`;
+  });
+  html+=`</div>`;
+
+  // R32→R16 connectors: each pair's two card centers merge to R16 center
+  html+=`<svg width="${LW}" height="${totalH}" style="flex-shrink:0" xmlns="http://www.w3.org/2000/svg">`;
+  R32.forEach((_,i)=>{
+    const [topY,botY]=r32CardCenters(i);
+    const midY=(topY+botY)/2;
+    html+=`<line x1="0" y1="${topY}" x2="${LW/2}" y2="${topY}" stroke="var(--border2)" stroke-width="1"/>
+    <line x1="${LW/2}" y1="${topY}" x2="${LW/2}" y2="${botY}" stroke="var(--border2)" stroke-width="1"/>
+    <line x1="0" y1="${botY}" x2="${LW/2}" y2="${botY}" stroke="var(--border2)" stroke-width="1"/>
+    <line x1="${LW/2}" y1="${midY}" x2="${LW}" y2="${midY}" stroke="var(--border2)" stroke-width="1"/>`;
+  });
+  html+=`</svg>`;
+
+  // R16: each match centered on its R32 pair
+  html+=`<div style="width:${CW}px;position:relative">`;
+  R16.forEach((id,i)=>{
+    const cy=r16Center(i);
+    html+=`<div style="position:absolute;top:${cy-CH/2}px;left:0;right:0">${card(id,CW)}</div>`;
+  });
+  html+=`</div>`;
+
+  // R16→QF: pairs of R16 matches merge to QF center
+  html+=`<svg width="${LW}" height="${totalH}" style="flex-shrink:0" xmlns="http://www.w3.org/2000/svg">`;
+  QF.forEach((_,i)=>{
+    const topY=r16Center(i*2), botY=r16Center(i*2+1), midY=(topY+botY)/2;
+    html+=`<line x1="0" y1="${topY}" x2="${LW/2}" y2="${topY}" stroke="var(--border2)" stroke-width="1"/>
+    <line x1="${LW/2}" y1="${topY}" x2="${LW/2}" y2="${botY}" stroke="var(--border2)" stroke-width="1"/>
+    <line x1="0" y1="${botY}" x2="${LW/2}" y2="${botY}" stroke="var(--border2)" stroke-width="1"/>
+    <line x1="${LW/2}" y1="${midY}" x2="${LW}" y2="${midY}" stroke="var(--border2)" stroke-width="1"/>`;
+  });
+  html+=`</svg>`;
+
+  // QF
+  html+=`<div style="width:${CW}px;position:relative">`;
+  QF.forEach((id,i)=>{
+    const cy=qfCenter(i);
+    html+=`<div style="position:absolute;top:${cy-CH/2}px;left:0;right:0">${card(id,CW)}</div>`;
+  });
+  html+=`</div>`;
+
+  // QF→SF
+  html+=`<svg width="${LW}" height="${totalH}" style="flex-shrink:0" xmlns="http://www.w3.org/2000/svg">`;
+  SF.forEach((_,i)=>{
+    const topY=qfCenter(i*2), botY=qfCenter(i*2+1), midY=(topY+botY)/2;
+    html+=`<line x1="0" y1="${topY}" x2="${LW/2}" y2="${topY}" stroke="var(--border2)" stroke-width="1"/>
+    <line x1="${LW/2}" y1="${topY}" x2="${LW/2}" y2="${botY}" stroke="var(--border2)" stroke-width="1"/>
+    <line x1="0" y1="${botY}" x2="${LW/2}" y2="${botY}" stroke="var(--border2)" stroke-width="1"/>
+    <line x1="${LW/2}" y1="${midY}" x2="${LW}" y2="${midY}" stroke="var(--border2)" stroke-width="1"/>`;
+  });
+  html+=`</svg>`;
+
+  // SF
+  html+=`<div style="width:${CW}px;position:relative">`;
+  SF.forEach((id,i)=>{
+    const cy=sfCenter(i);
+    html+=`<div style="position:absolute;top:${cy-CH/2}px;left:0;right:0">${card(id,CW)}</div>`;
+  });
+  html+=`</div>`;
+
+  // SF→Final
+  html+=`<svg width="${LW}" height="${totalH}" style="flex-shrink:0" xmlns="http://www.w3.org/2000/svg">`;
+  const sf0=sfCenter(0), sf1=sfCenter(1), sfMid=(sf0+sf1)/2;
+  html+=`<line x1="0" y1="${sf0}" x2="${LW/2}" y2="${sf0}" stroke="var(--border2)" stroke-width="1"/>
+  <line x1="${LW/2}" y1="${sf0}" x2="${LW/2}" y2="${sf1}" stroke="var(--border2)" stroke-width="1"/>
+  <line x1="0" y1="${sf1}" x2="${LW/2}" y2="${sf1}" stroke="var(--border2)" stroke-width="1"/>
+  <line x1="${LW/2}" y1="${sfMid}" x2="${LW}" y2="${sfMid}" stroke="var(--border2)" stroke-width="1"/>`;
+  html+=`</svg>`;
+
+  // Final + champ + 3rd
+  const fin=gm('M104'), champ=fin.winner;
+  const champP=champ?PLAYERS.find(p=>p.teams.some(t=>t.name===champ)):null;
+  const FW=CW+50;
+  html+=`<div style="width:${FW}px;position:relative">`;
+  html+=`<div style="position:absolute;top:${finCenter-CH/2}px;left:0;right:0">${card('M104',FW)}</div>`;
+  if(champ){
+    html+=`<div style="position:absolute;top:${finCenter+CH/2+8}px;left:0;right:0;border:2px solid #BA7517;border-radius:10px;padding:7px 10px">
+      <div style="font-size:9px;font-weight:500;color:#BA7517;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">🏆 Champion</div>
+      <div style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:500">
+        <div style="width:8px;height:8px;border-radius:50%;background:${champP?.col||'#ccc'}"></div>${champ}
+      </div>
+    </div>`;
+  }
+  html+=`<div style="position:absolute;bottom:0;left:0;right:0">
+    <div style="font-size:9px;color:var(--text3);text-align:center;font-style:italic;padding:4px 0 4px">3rd place</div>
+    ${card('M103',FW)}
+  </div>`;
+  html+=`</div>`;
+
+  html+=`</div></div></div>`;
   document.getElementById('bracket').innerHTML=html;
 }
 
