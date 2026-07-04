@@ -184,6 +184,10 @@ header{background:var(--surface);border-bottom:0.5px solid var(--border);padding
 <header>
   <div class="logo">WC 2026 <em>Sweepstake</em></div>
   <span class="sync-status sync-loading" id="sync-status">Connecting…</span>
+  <div style="display:flex;gap:6px;align-items:center">
+    <button onclick="exportBackup()" style="padding:5px 10px;border:0.5px solid var(--border2);border-radius:8px;background:var(--green-bg);color:var(--green-text);font-size:12px;font-weight:500;cursor:pointer">⬇ Backup</button>
+    <label style="padding:5px 10px;border:0.5px solid var(--border2);border-radius:8px;background:var(--surface2);color:var(--text2);font-size:12px;font-weight:500;cursor:pointer">⬆ Restore<input type="file" accept=".json" onchange="importBackup(this)" style="display:none"></label>
+  </div>
   <nav class="nav">
     <button class="active" onclick="showPage('leaderboard',this)">Leaderboard</button>
     <button onclick="showPage('groups',this)">Groups</button>
@@ -282,8 +286,8 @@ function defaultKoMatches(){
     {id:"M92",stage:"r16",label:"M92",homeSlot:"WM79",awaySlot:"WM80",homeTeam:null,awayTeam:null,homeG:null,awayG:null,winner:null},
     {id:"M93",stage:"r16",label:"M93",homeSlot:"WM81",awaySlot:"WM82",homeTeam:null,awayTeam:null,homeG:null,awayG:null,winner:null},
     {id:"M94",stage:"r16",label:"M94",homeSlot:"WM83",awaySlot:"WM84",homeTeam:null,awayTeam:null,homeG:null,awayG:null,winner:null},
-    {id:"M95",stage:"r16",label:"M95",homeSlot:"WM85",awaySlot:"WM86",homeTeam:null,awayTeam:null,homeG:null,awayG:null,winner:null},
-    {id:"M96",stage:"r16",label:"M96",homeSlot:"WM87",awaySlot:"WM88",homeTeam:null,awayTeam:null,homeG:null,awayG:null,winner:null},
+    {id:"M95",stage:"r16",label:"M95",homeSlot:"WM86",awaySlot:"WM87",homeTeam:null,awayTeam:null,homeG:null,awayG:null,winner:null},
+    {id:"M96",stage:"r16",label:"M96",homeSlot:"WM88",awaySlot:"WM85",homeTeam:null,awayTeam:null,homeG:null,awayG:null,winner:null},
     {id:"M97",stage:"qf",label:"QF1",homeSlot:"WM89",awaySlot:"WM90",homeTeam:null,awayTeam:null,homeG:null,awayG:null,winner:null},
     {id:"M98",stage:"qf",label:"QF2",homeSlot:"WM91",awaySlot:"WM92",homeTeam:null,awayTeam:null,homeG:null,awayG:null,winner:null},
     {id:"M99",stage:"qf",label:"QF3",homeSlot:"WM93",awaySlot:"WM94",homeTeam:null,awayTeam:null,homeG:null,awayG:null,winner:null},
@@ -316,6 +320,43 @@ function setStatus(state){
   if(state==='ok'){el.textContent='✓ Live';el.className='sync-status sync-ok';}
   else if(state==='err'){el.textContent='⚠ Offline';el.className='sync-status sync-err';}
   else{el.textContent='Syncing…';el.className='sync-status sync-loading';}
+}
+
+
+function exportBackup(){
+  const data={
+    matches:JSON.stringify(matches),
+    koMatches:JSON.stringify(koMatches),
+    photos:JSON.stringify(photos),
+    manualSlots:JSON.stringify(manualSlots),
+    exported:new Date().toISOString()
+  };
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='sweepstake-backup-'+new Date().toISOString().slice(0,10)+'.json';
+  a.click();
+}
+
+function importBackup(input){
+  const file=input.files[0];
+  if(!file)return;
+  if(!confirm('This will overwrite all current data. Are you sure?'))return;
+  const reader=new FileReader();
+  reader.onload=async e=>{
+    try{
+      const data=JSON.parse(e.target.result);
+      if(data.matches)matches=JSON.parse(data.matches);
+      if(data.koMatches)koMatches=JSON.parse(data.koMatches);
+      if(data.photos)photos=JSON.parse(data.photos);
+      if(data.manualSlots)manualSlots=JSON.parse(data.manualSlots);
+      correctBracket();
+      await saveToFirebase();
+      renderAll();
+      alert('Backup restored successfully!');
+    }catch(err){alert('Restore failed — invalid file.');}
+  };
+  reader.readAsText(file);
 }
 
 function correctBracket(){
@@ -849,7 +890,7 @@ function renderBracket(){
   function sfCenter(i){ return (qfCenter(i*2)+qfCenter(i*2+1))/2; }
   const finCenter = (sfCenter(0)+sfCenter(1))/2;
 
-  const R32=[['M74','M77'],['M73','M75'],['M76','M78'],['M79','M80'],['M83','M84'],['M81','M82'],['M86','M88'],['M85','M87']];
+  const R32=[['M74','M77'],['M73','M75'],['M83','M84'],['M81','M82'],['M76','M78'],['M79','M80'],['M86','M87'],['M88','M85']];
   const R16=['M89','M90','M93','M94','M91','M92','M95','M96'];
   const QF=['M97','M98','M99','M100'];
   const SF=['M101','M102'];
