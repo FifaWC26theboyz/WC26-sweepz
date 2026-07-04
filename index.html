@@ -319,7 +319,7 @@ function setStatus(state){
 }
 
 function correctBracket(){
-  // Force correct R32 matchups regardless of Firebase data
+  // Always force correct R32 teams — never let Firebase override these
   const correct = {
     "M74":["Germany","Paraguay"],
     "M77":["France","Sweden"],
@@ -340,8 +340,8 @@ function correctBracket(){
   };
   koMatches.forEach(m=>{
     if(correct[m.id]){
-      m.homeTeam=m.homeTeam&&m.homeTeam===correct[m.id][0]?m.homeTeam:correct[m.id][0];
-      m.awayTeam=m.awayTeam&&m.awayTeam===correct[m.id][1]?m.awayTeam:correct[m.id][1];
+      m.homeTeam=correct[m.id][0];
+      m.awayTeam=correct[m.id][1];
     }
   });
 }
