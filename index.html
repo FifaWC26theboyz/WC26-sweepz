@@ -318,6 +318,34 @@ function setStatus(state){
   else{el.textContent='Syncing…';el.className='sync-status sync-loading';}
 }
 
+function correctBracket(){
+  // Force correct R32 matchups regardless of Firebase data
+  const correct = {
+    "M74":["Germany","Paraguay"],
+    "M77":["France","Sweden"],
+    "M73":["South Africa","Canada"],
+    "M75":["Netherlands","Morocco"],
+    "M76":["Brazil","Japan"],
+    "M78":["Ivory Coast","Norway"],
+    "M79":["Mexico","Ecuador"],
+    "M80":["England","Congo DR"],
+    "M83":["Portugal","Croatia"],
+    "M84":["Spain","Austria"],
+    "M81":["USA","Bosnia-Herzegovina"],
+    "M82":["Belgium","Senegal"],
+    "M86":["Egypt","Australia"],
+    "M88":["Colombia","Ghana"],
+    "M85":["Switzerland","Algeria"],
+    "M87":["Argentina","Cape Verde"],
+  };
+  koMatches.forEach(m=>{
+    if(correct[m.id]){
+      m.homeTeam=m.homeTeam&&m.homeTeam===correct[m.id][0]?m.homeTeam:correct[m.id][0];
+      m.awayTeam=m.awayTeam&&m.awayTeam===correct[m.id][1]?m.awayTeam:correct[m.id][1];
+    }
+  });
+}
+
 async function loadFromFirebase(){
   try{
     const data = await fbGet('data');
@@ -340,6 +368,7 @@ async function loadFromFirebase(){
       if(data&&data.photos)photos=data.photos;
       if(data&&data.manualSlots)manualSlots=data.manualSlots;
       setStatus('ok');
+      correctBracket();
       renderAll();
     }catch(e){setStatus('err');}
   }, 30000);
